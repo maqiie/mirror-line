@@ -5,10 +5,16 @@ import { Check, Copy, X } from 'lucide-react';
 export function Logo({ size = 30 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="logo">
-      <rect width="32" height="32" rx="9" fill="var(--ink)" />
-      <path d="M16 6v20" stroke="#9fb0bb" strokeWidth="1.5" strokeDasharray="2 2.5" />
-      <path d="M13 22V10l-5 6z" fill="#9aa3ff" />
-      <path d="M19 22V10l5 6z" fill="#fff" opacity=".92" />
+      <defs>
+        <linearGradient id="logo-gold" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#f1d99f" />
+          <stop offset="1" stopColor="#a8803a" />
+        </linearGradient>
+      </defs>
+      <rect width="32" height="32" rx="9" fill="#0b0f16" stroke="rgba(212,175,106,.45)" />
+      <path d="M16 6v20" stroke="#d4af6a" strokeWidth="1.5" strokeDasharray="2 2.5" opacity=".7" />
+      <path d="M13 22V10l-5 6z" fill="url(#logo-gold)" />
+      <path d="M19 22V10l5 6z" fill="#f3efe6" opacity=".92" />
     </svg>
   );
 }

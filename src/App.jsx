@@ -1,6 +1,6 @@
 import { NavLink, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
-import { LogOut, WifiOff } from 'lucide-react';
+import { LogOut, Settings as SettingsIcon, WifiOff } from 'lucide-react';
 import { useAuth } from './lib/auth';
 import { DataProvider, useData } from './lib/DataContext';
 import { Logo, Toggle } from './components/ui';
@@ -11,6 +11,9 @@ import CopyLinks from './pages/CopyLinks';
 import Trades from './pages/Trades';
 import Risk from './pages/Risk';
 import Activity from './pages/Activity';
+import Landing from './pages/Landing';
+import Help from './pages/Help';
+import Settings from './pages/Settings';
 
 const NAV = [
   { to: '/', label: 'Overview', end: true },
@@ -19,6 +22,7 @@ const NAV = [
   { to: '/links', label: 'Copy links' },
   { to: '/risk', label: 'Risk' },
   { to: '/activity', label: 'Activity' },
+  { to: '/help', label: 'Help' },
 ];
 
 function Shell() {
@@ -42,6 +46,7 @@ function Shell() {
               <span>{paused ? 'Copying paused' : 'Copying live'}</span>
               <Toggle checked={!paused} onChange={(on) => actions.setPaused(!on)} label="Copy master trades to followers" />
             </label>
+            <NavLink className="icon-btn" to="/settings" aria-label="Settings" title="Settings"><SettingsIcon size={17} /></NavLink>
             <button className="icon-btn" onClick={signOut} aria-label={`Sign out${email ? ` (${email})` : ''}`} title={email ? `Sign out ${email}` : 'Sign out'}><LogOut size={17} /></button>
           </div>
         </div>
@@ -69,7 +74,7 @@ function Shell() {
 
 function Protected() {
   const { token } = useAuth();
-  if (!token) return <Navigate to="/login" replace />;
+  if (!token) return <Navigate to="/welcome" replace />;
   return <DataProvider><Shell /></DataProvider>;
 }
 
@@ -77,6 +82,7 @@ export default function App() {
   const { token } = useAuth();
   return (
     <Routes>
+      <Route path="/welcome" element={token ? <Navigate to="/" replace /> : <Landing />} />
       <Route path="/login" element={token ? <Navigate to="/" replace /> : <Login />} />
       <Route element={<Protected />}>
         <Route index element={<Overview />} />
@@ -85,6 +91,8 @@ export default function App() {
         <Route path="links" element={<CopyLinks />} />
         <Route path="risk" element={<Risk />} />
         <Route path="activity" element={<Activity />} />
+        <Route path="help" element={<Help />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
