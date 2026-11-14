@@ -64,7 +64,8 @@ export default function Landing() {
           <h1>Trade once.<br /><em>Every account follows.</em></h1>
           <p className="lead">Mirrorline copies your master account to as many follower accounts as you like, each sized and protected the way you choose. Watch every copy land in real time.</p>
           <div className="site-cta">
-            <Link to="/login" className="btn btn-primary btn-lg">Sign in to your dashboard <ArrowRight size={16} /></Link>
+            <Link to="/register" className="btn btn-primary btn-lg">Create your account <ArrowRight size={16} /></Link>
+            <Link to="/login" className="btn btn-lg">Sign in</Link>
             <a href="#how" className="btn btn-lg">See how it works</a>
           </div>
           <ul className="site-facts">
@@ -136,7 +137,7 @@ export default function Landing() {
       <section className="site-sec">
         <div className="cta-band">
           <h2 className="sec-title">Ready to trade once and let the rest follow?</h2>
-          <Link to="/login" className="btn btn-primary btn-lg">Sign in <ArrowRight size={16} /></Link>
+          <Link to="/register" className="btn btn-primary btn-lg">Get started <ArrowRight size={16} /></Link>
         </div>
       </section>
 

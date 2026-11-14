@@ -100,13 +100,19 @@ export function CopyButton({ text, label = 'Copy' }) {
 
 export function Modal({ title, onClose, children, wide }) {
   const ref = useRef(null);
+  const onCloseRef = useRef(onClose);
   const titleId = useId();
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     const prev = document.activeElement;
     const first = ref.current?.querySelector('input, select, textarea, button:not(.modal-x)');
     (first ?? ref.current)?.focus();
     const key = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current?.();
       if (e.key === 'Tab') {
         const nodes = ref.current.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex="0"]');
         if (!nodes.length) return;
@@ -122,7 +128,7 @@ export function Modal({ title, onClose, children, wide }) {
       document.body.style.overflow = '';
       prev?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

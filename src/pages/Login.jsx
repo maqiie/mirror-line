@@ -48,10 +48,13 @@ export default function Login() {
           <form onSubmit={submit} className="stack">
             <Field label="Email">{(id) => <input id={id} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
             <Field label="Password">{(id) => <input id={id} type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />}</Field>
+            <p className="hint" style={{ textAlign: 'right' }}><Link to="/forgot-password">Forgot password?</Link></p>
             {error && <p className="form-error" role="alert">{error}</p>}
+            <p className="hint">Didn't receive your verification email? <Link to="/resend-verification">Resend it</Link></p>
             <button className="btn btn-primary btn-block" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
           </form>
           {!isLive && <button className="btn btn-block" onClick={signInDemo}>Open the demo</button>}
+          <p className="hint login-note">New to Mirrorline? <Link to="/register">Create an account</Link></p>
           <p className="hint login-note">Your trading password is never entered here. Each account’s EA signs in with a token.</p>
         </div>
       </main>

@@ -12,6 +12,7 @@ function OrderTicket() {
   const [picked, setPicked] = useState(() => state.accounts.filter((a) => a.status === 'online' && accepting(a)).map((a) => a.id));
   const [symbol, setSymbol] = useState('EURUSD');
   const [side, setSide] = useState('buy');
+  const [entryPrice, setEntryPrice] = useState('');
   const [volume, setVolume] = useState('0.10');
   const [sl, setSl] = useState('');
   const [tp, setTp] = useState('');
@@ -24,14 +25,40 @@ function OrderTicket() {
   const covered = state.accounts.filter((a) => picked.includes(a.id) && a.role === 'slave' && master && picked.includes(master.id) && state.links.some((l) => l.active && l.master_id === master.id && l.slave_id === a.id));
   const direct = picked.length - covered.length;
   const vol = Number(volume);
-  const problem = !SYMBOL_OK.test(sym) ? 'Enter a valid symbol.' : !(vol > 0) ? 'Lots must be more than 0.' : picked.length === 0 ? 'Choose at least one account.' : '';
+  const isPending = ['buy_limit', 'sell_limit', 'buy_stop', 'sell_stop'].includes(side);
+  const entry = Number(entryPrice);
+  const orderLabel = {
+    buy: 'Market Buy',
+    sell: 'Market Sell',
+    buy_limit: 'Buy Limit',
+    sell_limit: 'Sell Limit',
+    buy_stop: 'Buy Stop',
+    sell_stop: 'Sell Stop',
+  }[side];
+  const problem = !SYMBOL_OK.test(sym)
+    ? 'Enter a valid symbol.'
+    : !(vol > 0)
+      ? 'Lots must be more than 0.'
+      : isPending && !(entry > 0)
+        ? 'Enter a valid pending-order entry price.'
+        : picked.length === 0
+          ? 'Choose at least one account.'
+          : '';
 
   const toggle = (id) => setPicked((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
   const submit = async (e) => {
     e.preventDefault();
     if (problem) return;
     setBusy(true);
-    await actions.placeOrder({ account_ids: picked, symbol: sym, side, volume: vol, sl: sl ? Number(sl) : null, tp: tp ? Number(tp) : null });
+    await actions.placeOrder({
+      account_ids: picked,
+      symbol: sym,
+      side,
+      volume: vol,
+      price: isPending ? entry : null,
+      sl: sl ? Number(sl) : null,
+      tp: tp ? Number(tp) : null,
+    });
     setBusy(false);
   };
 
@@ -39,11 +66,25 @@ function OrderTicket() {
     <section className="card ticket">
       <h2>New trade</h2>
       <form onSubmit={submit} className="stack">
-        <Segmented full label="Side" value={side} onChange={setSide} options={[{ value: 'buy', label: 'Buy', tone: 'buy' }, { value: 'sell', label: 'Sell', tone: 'sell' }]} />
+        <Field label="Order type">{(id) => (
+          <select id={id} value={side} onChange={(e) => setSide(e.target.value)}>
+            <option value="buy">Market Buy</option>
+            <option value="sell">Market Sell</option>
+            <option value="buy_stop">Buy Stop</option>
+            <option value="sell_stop">Sell Stop</option>
+            <option value="buy_limit">Buy Limit</option>
+            <option value="sell_limit">Sell Limit</option>
+          </select>
+        )}</Field>
         <div className="row2">
           <Field label="Symbol">{(id) => <><input id={id} list="symbols" value={symbol} onChange={(e) => setSymbol(e.target.value)} autoCapitalize="characters" spellCheck="false" /><datalist id="symbols">{suggestions.map((s) => <option key={s} value={s} />)}</datalist></>}</Field>
           <Field label="Lots">{(id) => <input id={id} type="number" min="0.01" step="0.01" required value={volume} onChange={(e) => setVolume(e.target.value)} />}</Field>
         </div>
+        {isPending && (
+          <Field label="Entry price">{(id) => (
+            <input id={id} type="number" min="0" step="any" required value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} placeholder="Pending order price" />
+          )}</Field>
+        )}
         <div className="row2">
           <Field label="Stop loss">{(id) => <input id={id} type="number" step="any" value={sl} onChange={(e) => setSl(e.target.value)} placeholder="Optional" />}</Field>
           <Field label="Take profit">{(id) => <input id={id} type="number" step="any" value={tp} onChange={(e) => setTp(e.target.value)} placeholder="Optional" />}</Field>
@@ -62,8 +103,8 @@ function OrderTicket() {
         </fieldset>
         {covered.length > 0 && <p className="note">{covered.map((a) => a.name).join(', ')} will copy this from the master using {covered.length === 1 ? 'its' : 'their'} link, not as a separate order.</p>}
         {problem && picked.length > 0 && <p className="form-error">{problem}</p>}
-        <button className={`btn btn-block ${side === 'buy' ? 'btn-buy' : 'btn-sell'}`} disabled={busy || !!problem}>
-          {side === 'buy' ? 'Buy' : 'Sell'} {lots(vol || 0)} {sym || 'symbol'} on {direct} account{direct === 1 ? '' : 's'}
+        <button className={`btn btn-block ${side.startsWith('buy') ? 'btn-buy' : 'btn-sell'}`} disabled={busy || !!problem}>
+          {orderLabel} {lots(vol || 0)} {sym || 'symbol'} on {direct} account{direct === 1 ? '' : 's'}
         </button>
       </form>
     </section>

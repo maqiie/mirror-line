@@ -5,6 +5,13 @@ import { useAuth } from './lib/auth';
 import { DataProvider, useData } from './lib/DataContext';
 import { Logo, Toggle } from './components/ui';
 import Login from './pages/Login';
+import {
+  Register,
+  VerifyEmail,
+  ResendVerification,
+  ForgotPassword,
+  ResetPassword,
+} from './pages/AuthPages';
 import Overview from './pages/Overview';
 import Accounts from './pages/Accounts';
 import CopyLinks from './pages/CopyLinks';
@@ -84,6 +91,11 @@ export default function App() {
     <Routes>
       <Route path="/welcome" element={token ? <Navigate to="/" replace /> : <Landing />} />
       <Route path="/login" element={token ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/register" element={token ? <Navigate to="/" replace /> : <Register />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/resend-verification" element={<ResendVerification />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<Protected />}>
         <Route index element={<Overview />} />
         <Route path="trades" element={<Trades />} />
