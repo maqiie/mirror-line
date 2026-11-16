@@ -646,6 +646,8 @@ void MPending(MCmd &c, MRes &r)
    double minDistance = (double)SymbolInfoInteger(sym, SYMBOL_TRADE_STOPS_LEVEL) * point;
 
    double entry = NormalizeDouble(c.price, dg);
+   double sl = (c.sl > 0 ? NormalizeDouble(c.sl, dg) : 0.0);
+   double tp = (c.tp > 0 ? NormalizeDouble(c.tp, dg) : 0.0);
    double bid = SymbolInfoDouble(sym, SYMBOL_BID);
    double ask = SymbolInfoDouble(sym, SYMBOL_ASK);
 

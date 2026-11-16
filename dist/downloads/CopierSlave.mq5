@@ -220,6 +220,7 @@ void Execute(SlaveCmd &c, SlaveRes &r)
    else if(a == "pending_modify") DoPendingModify(c, r);
    else if(a == "pending_delete") DoPendingDelete(c, r);
    else if(a == "close_ticket")   DoCloseTicket(c, r);
+   else if(a == "modify_ticket")  DoModifyTicket(c, r);
    else if(a == "close_all")      DoCloseAll(r, InpCloseAllAnyMagic);
    else                           SetRes(r, "failed", "unknown action " + a);
 }
@@ -489,22 +490,106 @@ bool CmdIsStale(SlaveCmd &c, string &why)
 //+------------------------------------------------------------------+
 //| Actions                                                           |
 //+------------------------------------------------------------------+
-// If we had a pending copy for this master ticket: cancel it if still pending,
-// or adopt it if it already filled. Returns true when adopted (nothing to open).
-bool ResolvePendingForOpen(ulong mt, ulong &posTicket)
+// Find a live position using its stable MT5 position identifier.
+ulong PositionTicketByIdentifier(ulong identifier)
+{
+   if(identifier == 0) return 0;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong t = PositionGetTicket(i);
+      if(t > 0 && (ulong)PositionGetInteger(POSITION_IDENTIFIER) == identifier)
+         return t;
+   }
+   return 0;
+}
+
+
+// Cancel any remaining pending volume after a partial fill.
+// Returns true only when the order is confirmed inactive.
+bool CancelRemainingPending(ulong mt)
 {
    string k = GVOrd(mt);
-   if(!GlobalVariableCheck(k)) return false;
+   if(!GlobalVariableCheck(k)) return true;
+
    ulong o = (ulong)GlobalVariableGet(k);
-   GlobalVariableDel(k);
-   if(OrderSelect(o)) { g_trade.OrderDelete(o); return false; }
-   if(PositionSelectByTicket(o))
+
+   if(!OrderSelect(o))
    {
-      posTicket = o;
-      GlobalVariableSet(GVPos(mt), (double)o);
+      GlobalVariableDel(k);
       return true;
    }
-   return false;
+
+   bool deleted = g_trade.OrderDelete(o);
+   uint rc = g_trade.ResultRetcode();
+
+   if(!deleted || !CP_TradeDeleted(rc))
+   {
+      // The order may have filled while deletion was being processed.
+      if(OrderSelect(o)) return false;
+   }
+
+   if(OrderSelect(o)) return false;
+
+   GlobalVariableDel(k);
+   return true;
+}
+
+// Returns: 1 = adopted, 0 = no pending copy / successfully cancelled,
+//         -1 = unresolved or cancellation failed (do not open a market duplicate).
+int ResolvePendingForOpen(ulong mt, ulong &posTicket)
+{
+   string k = GVOrd(mt);
+   if(!GlobalVariableCheck(k)) return 0;
+
+   ulong o = (ulong)GlobalVariableGet(k);
+
+   // If the follower's pending order is still active, cancel it
+   // before allowing the market-open command to proceed.
+   if(OrderSelect(o))
+   {
+      bool deleted = g_trade.OrderDelete(o);
+      if(deleted && CP_TradeDeleted(g_trade.ResultRetcode()))
+      {
+         GlobalVariableDel(k);
+         return 0;
+      }
+
+      // It may have filled between selection and deletion.
+      if(OrderSelect(o)) return -1;
+   }
+
+   // The order is no longer active. Inspect its historical state.
+   if(!HistoryOrderSelect(o)) return -1;
+
+   ENUM_ORDER_STATE state =
+      (ENUM_ORDER_STATE)HistoryOrderGetInteger(o, ORDER_STATE);
+
+   // It never filled: clear the old pending reference and allow
+   // the master market-open event to execute normally.
+   if(state == ORDER_STATE_CANCELED ||
+      state == ORDER_STATE_EXPIRED ||
+      state == ORDER_STATE_REJECTED)
+   {
+      GlobalVariableDel(k);
+      return 0;
+   }
+
+   // Only a filled or partially filled order can be adopted.
+   if(state != ORDER_STATE_FILLED &&
+      state != ORDER_STATE_PARTIAL)
+      return -1;
+
+   ulong identifier =
+      (ulong)HistoryOrderGetInteger(o, ORDER_POSITION_ID);
+
+   ulong actualTicket = PositionTicketByIdentifier(identifier);
+   if(actualTicket == 0) return -1;
+
+   posTicket = actualTicket;
+   GlobalVariableSet(GVPos(mt), (double)actualTicket);
+   GlobalVariableDel(k);
+   return 1;
 }
 
 void DoOpen(SlaveCmd &c, SlaveRes &r, bool isAdd)
@@ -512,10 +597,24 @@ void DoOpen(SlaveCmd &c, SlaveRes &r, bool isAdd)
    if(!isAdd)
    {
       ulong ex = FindCopy(c.mticket);
-      if(ex > 0) { SetRes(r, "skipped", "already copied"); r.ticket = ex; return; }
+      if(ex > 0)
+      {
+         if(!CancelRemainingPending(c.mticket))
+         {
+            SetRes(r, "failed", "existing copied position found, but remaining pending order could not be cancelled");
+            r.ticket = ex;
+            return;
+         }
+         SetRes(r, "skipped", "already copied; remaining pending order cleared");
+         r.ticket = ex;
+         return;
+      }
       ulong adopted = 0;
-      if(ResolvePendingForOpen(c.mticket, adopted))
+      int pendingResult = ResolvePendingForOpen(c.mticket, adopted);
+      if(pendingResult > 0)
       { SetRes(r, "executed", "adopted filled pending order"); r.ticket = adopted; return; }
+      if(pendingResult < 0)
+      { SetRes(r, "failed", "pending order state could not be resolved; refusing duplicate market entry"); return; }
    }
 
    string why;
@@ -728,6 +827,35 @@ void DoCloseTicket(SlaveCmd &c, SlaveRes &r)
    if(!ok || !CP_TradeFullyDone(g_trade.ResultRetcode()))
    { SetRes(r, "failed", StringFormat("%u %s", g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription())); return; }
    r.status = "executed"; r.ticket = c.mticket; r.volume = vol; r.price = g_trade.ResultPrice();
+}
+
+// Modify SL/TP on one raw broker position ticket (dashboard edit).
+void DoModifyTicket(SlaveCmd &c, SlaveRes &r)
+{
+   if(!PositionSelectByTicket(c.mticket))
+   { SetRes(r, "skipped", "no open position with that ticket"); return; }
+
+   string sym = PositionGetString(POSITION_SYMBOL);
+   double oldSL = PositionGetDouble(POSITION_SL);
+   double oldTP = PositionGetDouble(POSITION_TP);
+   double pt = SymbolInfoDouble(sym, SYMBOL_POINT);
+
+   if(MathAbs(c.sl - oldSL) < pt / 2 &&
+      MathAbs(c.tp - oldTP) < pt / 2)
+   { SetRes(r, "skipped", "no change"); r.ticket = c.mticket; return; }
+
+   g_trade.SetTypeFillingBySymbol(sym);
+   bool ok = g_trade.PositionModify(c.mticket, c.sl, c.tp);
+
+   if(!ok || !CP_TradeModified(g_trade.ResultRetcode()))
+   {
+      SetRes(r, "failed", StringFormat("%u %s",
+         g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription()));
+      return;
+   }
+
+   r.status = "executed";
+   r.ticket = c.mticket;
 }
 
 // anyMagic=false closes only copier trades (used by the daily-loss guard);
