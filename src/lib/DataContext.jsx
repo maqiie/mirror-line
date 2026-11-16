@@ -99,6 +99,7 @@ export function DataProvider({ children }) {
       removeLink: (id) => act(() => api.removeLink(id), (s) => ({ ...s, links: s.links.filter((l) => l.id !== id) }), 'Link removed'),
 
       closePosition: (ticket) => act(() => api.closePosition(ticket), (s) => demo.closeByTicket(s, ticket), 'Close order sent'),
+      modifyPosition: (ticket, stops) => act(() => api.modifyPosition(ticket, stops), (s) => demo.modifyPosition(s, ticket, stops), 'SL/TP modification sent'),
       closeAll: (accountId) => act(() => api.closeAll(accountId), (s) => demo.closeAllLocal(s, accountId), 'Close orders sent'),
       placeOrder: (order) =>
         act(

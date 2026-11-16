@@ -212,6 +212,7 @@ export const removeLink = (id) => req(`/api/v1/copy_links/${id}`, { method: 'DEL
 
 // ---- trading ----
 export const closePosition = (ticket) => req(`/api/v1/positions/${ticket}/close`, { method: 'POST' });
+export const modifyPosition = (ticket, stops) => req(`/api/v1/positions/${ticket}/modify`, { method: 'POST', body: stops });
 export const closeAll = (accountId) => req('/api/v1/positions/close_all', { method: 'POST', body: { account_id: accountId ?? null } });
 export const placeOrder = (b) => req('/api/v1/orders', { method: 'POST', body: b });
 export const setCopierPaused = (paused) => req('/api/v1/copier', { method: 'PUT', body: { paused } });

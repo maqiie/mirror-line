@@ -416,7 +416,7 @@ string QuotesJson()
 //| Trades opened here are reported to the server like any other,     |
 //| so the followers copy them through their links.                   |
 //+------------------------------------------------------------------+
-struct MCmd { long id; string action; ulong key; string symbol; string side; double volume; double sl; double tp; long created; int slip; };
+struct MCmd { long id; string action; ulong key; string symbol; string side; double volume; double price; double sl; double tp; long created; int slip; };
 struct MRes { string status; string msg; ulong ticket; double volume; double price; };
 
 string GVLast() { return "CPL_" + (string)AccountInfoInteger(ACCOUNT_LOGIN); }
@@ -443,6 +443,7 @@ void PollCommands()
       c.symbol  = p[3];
       c.side    = p[4];
       c.volume  = StringToDouble(p[5]);
+      c.price   = StringToDouble(p[6]);
       c.sl      = StringToDouble(p[7]);
       c.tp      = StringToDouble(p[8]);
       c.created = StringToInteger(p[14]);
@@ -500,7 +501,9 @@ void PollCommands()
 void MExecute(MCmd &c, MRes &r)
 {
    if(c.action == "open")              MOpen(c, r);
+   else if(c.action == "pending_place")    MPending(c, r);
    else if(c.action == "close_ticket") MCloseTicket(c, r);
+   else if(c.action == "modify_ticket") MModifyTicket(c, r);
    else if(c.action == "close_all")    MCloseAll(r);
    else { r.status = "skipped"; r.msg = "master does not handle " + c.action; }
 }
@@ -577,6 +580,151 @@ void MOpen(MCmd &c, MRes &r)
    r.status = "executed"; r.ticket = pos; r.volume = g_trade.ResultVolume(); r.price = g_trade.ResultPrice();
 }
 
+
+// Place a dashboard-originated pending order on the master account.
+// The resulting order is detected by ScanOrders() and copied to followers.
+void MPending(MCmd &c, MRes &r)
+{
+   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) ||
+      !MQLInfoInteger(MQL_TRADE_ALLOWED) ||
+      !AccountInfoInteger(ACCOUNT_TRADE_ALLOWED))
+   {
+      r.status = "skipped";
+      r.msg = "trading not allowed (enable Algo Trading and EA trading)";
+      return;
+   }
+
+   if(InpMaxCmdAgeSec > 0 && c.created > 0 &&
+      (long)TimeGMT() - c.created > InpMaxCmdAgeSec)
+   {
+      r.status = "skipped";
+      r.msg = "stale command";
+      return;
+   }
+
+   bool isBuy = (c.side == "buy_limit" || c.side == "buy_stop");
+
+   if(!isBuy && c.side != "sell_limit" && c.side != "sell_stop")
+   {
+      r.status = "skipped";
+      r.msg = "unsupported pending order side: " + c.side;
+      return;
+   }
+
+   if(c.price <= 0)
+   {
+      r.status = "skipped";
+      r.msg = "pending order entry price must be positive";
+      return;
+   }
+
+   string sym = CP_FindSymbol(c.symbol, InpPrefix, InpSuffix);
+   if(sym == "")
+   {
+      r.msg = "symbol not found: " + c.symbol;
+      return;
+   }
+
+   double step = SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP);
+   double mn   = SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN);
+   double mx   = MathMin(SymbolInfoDouble(sym, SYMBOL_VOLUME_MAX), InpMaxOrderLot);
+
+   if(step <= 0) step = 0.01;
+
+   double vol = MathFloor(MathMin(c.volume, mx) / step + 1e-9) * step;
+   if(vol < mn)
+   {
+      r.status = "skipped";
+      r.msg = "lot below broker minimum";
+      return;
+   }
+
+   vol = NormalizeDouble(vol, (int)MathMax(0, MathRound(-MathLog10(step))));
+
+   int dg = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+   double point = SymbolInfoDouble(sym, SYMBOL_POINT);
+   double minDistance = (double)SymbolInfoInteger(sym, SYMBOL_TRADE_STOPS_LEVEL) * point;
+
+   double entry = NormalizeDouble(c.price, dg);
+   double bid = SymbolInfoDouble(sym, SYMBOL_BID);
+   double ask = SymbolInfoDouble(sym, SYMBOL_ASK);
+
+   if(bid <= 0 || ask <= 0)
+   {
+      r.msg = "symbol has no valid bid/ask quote";
+      return;
+   }
+
+   if(c.side == "buy_limit" && entry >= ask)
+   {
+      r.status = "skipped";
+      r.msg = "buy limit entry must be below ask";
+      return;
+   }
+   if(c.side == "buy_stop" && entry <= ask)
+   {
+      r.status = "skipped";
+      r.msg = "buy stop entry must be above ask";
+      return;
+   }
+   if(c.side == "sell_limit" && entry <= bid)
+   {
+      r.status = "skipped";
+      r.msg = "sell limit entry must be above bid";
+      return;
+   }
+   if(c.side == "sell_stop" && entry >= bid)
+   {
+      r.status = "skipped";
+      r.msg = "sell stop entry must be below bid";
+      return;
+   }
+
+   // Keep protective levels on the correct side of the pending entry
+   // and outside the broker's minimum stop distance.
+   if(sl > 0)
+   {
+      if(isBuy && entry - sl < minDistance) sl = entry - minDistance;
+      if(!isBuy && sl - entry < minDistance) sl = entry + minDistance;
+      sl = NormalizeDouble(sl, dg);
+   }
+
+   if(tp > 0)
+   {
+      if(isBuy && tp - entry < minDistance) tp = entry + minDistance;
+      if(!isBuy && entry - tp < minDistance) tp = entry - minDistance;
+      tp = NormalizeDouble(tp, dg);
+   }
+
+   g_trade.SetTypeFillingBySymbol(sym);
+   g_trade.SetDeviationInPoints(c.slip > 0 ? c.slip : InpSlippagePts);
+
+   bool ok = false;
+
+   if(c.side == "buy_limit")
+      ok = g_trade.BuyLimit(vol, entry, sym, sl, tp, ORDER_TIME_GTC, 0, "ML:dash");
+   else if(c.side == "sell_limit")
+      ok = g_trade.SellLimit(vol, entry, sym, sl, tp, ORDER_TIME_GTC, 0, "ML:dash");
+   else if(c.side == "buy_stop")
+      ok = g_trade.BuyStop(vol, entry, sym, sl, tp, ORDER_TIME_GTC, 0, "ML:dash");
+   else if(c.side == "sell_stop")
+      ok = g_trade.SellStop(vol, entry, sym, sl, tp, ORDER_TIME_GTC, 0, "ML:dash");
+
+   uint rc = g_trade.ResultRetcode();
+
+   if(!ok || !CP_PendingAccepted(rc))
+   {
+      r.msg = StringFormat("%u %s", rc, g_trade.ResultRetcodeDescription());
+      return;
+   }
+
+   r.status = "executed";
+   r.msg = "pending order placed";
+   r.ticket = g_trade.ResultOrder();
+   r.volume = vol;
+   r.price = entry;
+}
+
 void MCloseTicket(MCmd &c, MRes &r)
 {
    if(!PositionSelectByTicket(c.key)) { r.status = "skipped"; r.msg = "no open position with that ticket"; return; }
@@ -594,6 +742,35 @@ void MCloseTicket(MCmd &c, MRes &r)
    if(!ok || !CP_TradeFullyDone(g_trade.ResultRetcode()))
    { r.msg = StringFormat("%u %s", g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription()); return; }
    r.status = "executed"; r.ticket = c.key; r.volume = vol; r.price = g_trade.ResultPrice();
+}
+
+// Modify SL/TP on one raw broker position ticket (dashboard edit).
+void MModifyTicket(MCmd &c, MRes &r)
+{
+   if(!PositionSelectByTicket(c.key))
+   { r.status = "skipped"; r.msg = "no open position with that ticket"; return; }
+
+   string sym = PositionGetString(POSITION_SYMBOL);
+   double oldSL = PositionGetDouble(POSITION_SL);
+   double oldTP = PositionGetDouble(POSITION_TP);
+   double pt = SymbolInfoDouble(sym, SYMBOL_POINT);
+
+   if(MathAbs(c.sl - oldSL) < pt / 2 &&
+      MathAbs(c.tp - oldTP) < pt / 2)
+   { r.status = "skipped"; r.msg = "no change"; r.ticket = c.key; return; }
+
+   g_trade.SetTypeFillingBySymbol(sym);
+   bool ok = g_trade.PositionModify(c.key, c.sl, c.tp);
+
+   if(!ok || !CP_TradeModified(g_trade.ResultRetcode()))
+   {
+      r.msg = StringFormat("%u %s",
+         g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+      return;
+   }
+
+   r.status = "executed";
+   r.ticket = c.key;
 }
 
 void MCloseAll(MRes &r)

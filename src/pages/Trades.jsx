@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Pencil } from 'lucide-react';
 import { useData, accountName } from '../lib/DataContext';
 import { COMMON_SYMBOLS, SYMBOLS, lots, money, plClass, price } from '../lib/format';
-import { Confirm, Empty, Field, PageHead, Segmented, SideBadge } from '../components/ui';
+import { Confirm, Empty, Field, Modal, PageHead, Segmented, SideBadge } from '../components/ui';
 
 const SYMBOL_OK = /^[\w.\-#+]{1,32}$/;
 
@@ -115,6 +115,30 @@ function Positions() {
   const { state, actions } = useData();
   const [filter, setFilter] = useState('all');
   const [confirmAll, setConfirmAll] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [sl, setSl] = useState('');
+  const [tp, setTp] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const openEdit = (position) => {
+    setEditing(position);
+    setSl(position.sl == null ? '' : String(position.sl));
+    setTp(position.tp == null ? '' : String(position.tp));
+  };
+
+  const saveStops = async (e) => {
+    e.preventDefault();
+    if (!editing || saving) return;
+    for (const [label, value] of [['SL', sl], ['TP', tp]]) {
+      if (value.trim() !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+        return;
+      }
+    }
+    setSaving(true);
+    const ok = await actions.modifyPosition(editing.ticket, { sl, tp });
+    setSaving(false);
+    if (ok) setEditing(null);
+  };
   const rows = state.positions.filter((p) => filter === 'all' || p.account_id === Number(filter)).sort((a, b) => new Date(b.opened_at) - new Date(a.opened_at));
   const total = rows.reduce((t, p) => t + p.profit, 0);
 
@@ -135,7 +159,7 @@ function Positions() {
       ) : (
         <div className="table-wrap">
           <table className="tight">
-            <thead><tr><th>Account</th><th>Symbol</th><th>Side</th><th className="r">Lots</th><th className="r">Open</th><th className="r">Now</th><th className="r hide-md">SL</th><th className="r hide-md">TP</th><th className="r">Profit</th><th><span className="sr">Close</span></th></tr></thead>
+            <thead><tr><th>Account</th><th>Symbol</th><th>Side</th><th className="r">Lots</th><th className="r">Open</th><th className="r">Now</th><th className="r hide-md">SL</th><th className="r hide-md">TP</th><th className="r">Profit</th><th><span className="sr">Actions</span></th></tr></thead>
             <tbody>
               {rows.map((p) => (
                 <tr key={p.ticket}>
@@ -148,12 +172,32 @@ function Positions() {
                   <td className="r num muted hide-md">{p.sl ? price(p.symbol, p.sl) : '—'}</td>
                   <td className="r num muted hide-md">{p.tp ? price(p.symbol, p.tp) : '—'}</td>
                   <td className={`r num ${plClass(p.profit)}`}>{money(p.profit, { sign: true })}</td>
-                  <td className="r"><button className="icon-btn danger" onClick={() => actions.closePosition(p.ticket)} aria-label={`Close ${p.symbol} on ${accountName(state, p.account_id)}`}><X size={16} /></button></td>
+                  <td className="r nowrap">
+                    <button className="icon-btn" onClick={() => openEdit(p)} aria-label={`Edit SL/TP for ${p.symbol}`} title="Edit stop loss and take profit"><Pencil size={15} /></button>
+                    <button className="icon-btn danger" onClick={() => actions.closePosition(p.ticket)} aria-label={`Close ${p.symbol} on ${accountName(state, p.account_id)}`} title="Close position"><X size={16} /></button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {editing && (
+        <Modal title={`Edit SL/TP · ${editing.symbol}`} onClose={() => !saving && setEditing(null)}>
+          <form className="stack" onSubmit={saveStops}>
+            <p className="muted">Update protection levels for {accountName(state, editing.account_id)}. Leave a field blank to remove that level.</p>
+            <Field label="Stop loss">
+              {(id) => <input id={id} type="number" min="0" step="any" value={sl} onChange={(e) => setSl(e.target.value)} placeholder="No stop loss" />}
+            </Field>
+            <Field label="Take profit">
+              {(id) => <input id={id} type="number" min="0" step="any" value={tp} onChange={(e) => setTp(e.target.value)} placeholder="No take profit" />}
+            </Field>
+            <div className="actions">
+              <button type="button" className="btn" disabled={saving} onClick={() => setEditing(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={saving}>{saving ? 'Sending…' : 'Save SL/TP'}</button>
+            </div>
+          </form>
+        </Modal>
       )}
       {confirmAll && (
         <Confirm

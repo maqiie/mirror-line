@@ -141,6 +141,15 @@ export function randomEvent(s) {
   return closeByTicket(s, pick(open).ticket);
 }
 
+export function modifyPosition(s, ticket, stops) {
+  return recompute({
+    ...s,
+    positions: s.positions.map((p) => p.ticket === ticket
+      ? { ...p, sl: stops.sl === '' ? null : Number(stops.sl), tp: stops.tp === '' ? null : Number(stops.tp) }
+      : p),
+  });
+}
+
 export function closeByTicket(s, ticket) {
   const pos = s.positions.find((p) => p.ticket === ticket);
   if (!pos) return s;
