@@ -29,6 +29,47 @@ const DOWNLOADS = [
   { file: 'CopierCommon.mqh', title: 'CopierCommon', role: 'Required', size: '10 KB', text: 'Shared library used by both EAs. Must sit in the same folder as them.' },
 ];
 
+const MT4_DOWNLOADS = [
+  { file: 'CopierMaster.mq4', title: 'CopierMaster MT4', role: 'Master', size: '27 KB', text: 'Attach to the MT4 account where trades originate.' },
+  { file: 'CopierSlave.mq4', title: 'CopierSlave MT4', role: 'Follower', size: '36 KB', text: 'Attach to each MT4 account that receives copied trades.' },
+  { file: 'CopierCommon4.mqh', title: 'CopierCommon4', role: 'Required', size: '16 KB', text: 'Shared MT4 library required by both MT4 EAs.' },
+];
+
+const MT4_INPUTS = [
+  ['InpServerUrl', 'Both', 'Your Mirrorline server URL.'],
+  ['InpToken', 'Both', 'The unique connection token for this trading account.'],
+  ['InpHeartbeatSec', 'Both', 'How often the EA reports that the account is online. Default 5 seconds.'],
+  ['InpScanMs', 'Master', 'How often the master scans for trade changes. Default 100 ms.'],
+  ['InpOnlyMagic', 'Master', '-1 monitors all magic numbers; another value filters to that magic number.'],
+  ['InpSymbols', 'Master', 'Optional comma-separated symbol filter. Empty means all symbols.'],
+  ['InpCopyPending', 'Master', 'Whether pending orders are reported.'],
+  ['InpSkipCopierTrades', 'Master', 'Ignores trades tagged by the copier to help prevent copying loops.'],
+  ['InpAnnounceExisting', 'Master', 'Whether trades already open when the EA starts are announced. Off by default.'],
+  ['InpAcceptCommands', 'Master', 'Allows dashboard commands to open or close trades on the master account.'],
+  ['InpOrderMagic', 'Master', 'Magic number assigned to trades opened from the dashboard.'],
+  ['InpSlippagePts', 'Both', 'Maximum execution slippage in points.'],
+  ['InpMaxOrderLot', 'Master', 'Maximum lot size for an order sent from the dashboard. Default 10.'],
+  ['InpMaxCmdAgeSec', 'Both', 'Maximum age of an opening command before it is ignored. Default 15 seconds.'],
+  ['InpPollMs', 'Follower', 'How often the follower checks for new commands. Default 250 ms.'],
+  ['InpMagic', 'Follower', 'Magic number used to identify copied trades. Default 770077.'],
+  ['InpMaxDriftPts', 'Follower', 'Skips an opening trade if price drift exceeds this value. 0 disables the limit.'],
+  ['InpMaxSpreadPts', 'Follower', 'Skips an opening trade if spread exceeds this value. 0 disables the limit.'],
+  ['InpRetries', 'Follower', 'Number of execution retries. Default 3.'],
+  ['InpCopySLTP', 'Follower', 'Copies stop loss and take profit. Enabled by default.'],
+  ['InpCloseAllAnyMagic', 'Follower', 'Allows dashboard Close All to include manually opened trades.'],
+  ['InpMaxLot', 'Follower', 'Maximum lot size. Dashboard Risk settings override the EA defaults.'],
+  ['InpRoundUpToMin', 'Follower', 'If enabled, raises undersized trades to broker minimum lot instead of skipping them.'],
+  ['InpMaxPositions', 'Follower', 'Maximum number of open positions. Default 30.'],
+  ['InpMinMarginLevel', 'Follower', 'Minimum margin level percentage. 0 disables this check.'],
+  ['InpUseMarginPct', 'Follower', 'Maximum percentage of free margin one trade may use.'],
+  ['InpMaxDailyLossPct', 'Follower', 'Daily loss limit percentage. 0 disables this limit.'],
+  ['InpCloseAllOnDailyLoss', 'Follower', 'Closes copier trades when the daily loss limit is reached.'],
+  ['InpPrefix / InpSuffix', 'Both', 'Optional broker symbol prefix or suffix.'],
+  ['InpSymbolMap', 'Follower', 'Maps broker symbols, for example GOLD=XAUUSD;US30=DJ30.'],
+  ['InpQuoteSymbols', 'Both', 'Comma-separated symbols whose prices are displayed on the dashboard.'],
+  ['InpDebug', 'Both', 'Enables additional diagnostic logging.'],
+];
+
 const CHECKLIST = [
   'Master account added to the dashboard',
   'Follower accounts added to the dashboard',
@@ -197,9 +238,9 @@ export default function Help() {
           <Section id="before" n={1} title="Before you begin" intro="Make sure you have the following in place.">
             <ul className="ticks">
               <li>An active Mirrorline account and access to this dashboard.</li>
-              <li>A MetaTrader 5 trading account for every master and follower you plan to connect.</li>
-              <li>MetaTrader 5 installed on your computer or VPS.</li>
-              <li>The three EA files from the <a href="#download">download section</a> below: <code>CopierMaster</code>, <code>CopierSlave</code> and <code>CopierCommon.mqh</code>.</li>
+              <li>A MetaTrader 4 or MetaTrader 5 trading account for every master and follower you plan to connect.</li>
+              <li>The matching MetaTrader 4 or MetaTrader 5 terminal installed on your computer or VPS.</li>
+              <li>The three files for your platform from the <a href="#download">download section</a>. Do not mix MT4 files with MT5 files.</li>
               <li>A stable internet connection.</li>
             </ul>
             <Callout tone="warn" title="Keep the terminal running">Your computer or VPS must stay on, online and running MetaTrader for copying to continue. For uninterrupted operation we recommend a Windows VPS.</Callout>
@@ -223,7 +264,8 @@ export default function Help() {
             <Callout title="Don’t mix them up">Never install the master EA on a follower account or the follower EA on a master. Several followers can be linked to one master.</Callout>
           </Section>
 
-          <Section id="download" n={3} title="Download the Expert Advisors" intro="Download the three files below, or take them all in one zip.">
+          <Section id="download" n={3} title="Download the Expert Advisors" intro="Choose the package that matches the platform selected for your trading account.">
+            <h3>MetaTrader 5 (MT5)</h3>
             <div className="dl-grid">
               {DOWNLOADS.map((d) => (
                 <a key={d.file} className="dl" href={`/downloads/${d.file}`} download>
@@ -239,29 +281,53 @@ export default function Help() {
             </div>
             <a className="dl dl-all" href="/downloads/Mirrorline-EAs.zip" download>
               <span className="dl-ico"><Package size={20} /></span>
-              <span className="dl-body"><strong>Download all three files (.zip)</strong><span className="muted small">CopierMaster.mq5, CopierSlave.mq5 and CopierCommon.mqh in one bundle. Unzip them into the same folder.</span></span>
+              <span className="dl-body"><strong>Download MT5 package (.zip)</strong><span className="muted small">Contains CopierMaster.mq5, CopierSlave.mq5 and CopierCommon.mqh.</span></span>
               <span className="dl-go"><Download size={18} /></span>
             </a>
-            <Callout tone="note" title="These are source files">They are MetaTrader 5 source code (<code>.mq5</code>), so they need compiling once in MetaEditor. The install steps below show how. You do not need to edit the code.</Callout>
+
+            <h3>MetaTrader 4 (MT4)</h3>
+            <div className="dl-grid">
+              {MT4_DOWNLOADS.map((d) => (
+                <a key={d.file} className="dl" href={`/downloads/${d.file}`} download>
+                  <span className="dl-ico"><FileCode2 size={20} /></span>
+                  <span className="dl-body">
+                    <strong>{d.title}</strong>
+                    <span className="muted small">{d.text}</span>
+                    <span className="tags"><span className={`badge ${d.role === 'Master' ? 'badge-accent' : ''}`}>{d.role}</span><code>{d.file}</code><span className="muted small">{d.size}</span></span>
+                  </span>
+                  <span className="dl-go"><Download size={18} /></span>
+                </a>
+              ))}
+            </div>
+            <a className="dl dl-all" href="/downloads/Mirrorline-MT4-EAs.zip" download>
+              <span className="dl-ico"><Package size={20} /></span>
+              <span className="dl-body"><strong>Download MT4 package (.zip)</strong><span className="muted small">Contains CopierMaster.mq4, CopierSlave.mq4 and CopierCommon4.mqh. Keep all three files together.</span></span>
+              <span className="dl-go"><Download size={18} /></span>
+            </a>
+            <Callout tone="warn" title="Do not mix platform files">MT4 uses .mq4 and .mqh files in MQL4. MT5 uses .mq5 and .mqh files in MQL5. Download and install only the package matching your account's platform.</Callout>
+            <Callout tone="note" title="Source files need compiling">These downloads contain source code. Compile the master and follower files in MetaEditor before attaching them. The shared .mqh file is required and must remain alongside the EA source files.</Callout>
           </Section>
 
-          <Section id="install" n={4} title="Install the Expert Advisors" intro="Repeat these steps for every MetaTrader 5 terminal you connect.">
+          <Section id="install" n={4} title="Install and compile the EAs" intro="Follow the instructions for the platform you selected when adding the trading account. Repeat on every separate trading terminal.">
+            <h3>MetaTrader 4 installation</h3>
             <Steps items={[
-              ['Open MetaTrader 5 and log in', <p>Log in to the trading account you want to connect and confirm it is receiving live prices.</p>],
-              ['Open the Data Folder', <p>Choose <strong>File → Open Data Folder</strong>, then open <code>MQL5</code> and then <code>Experts</code>. The path ends in <code>MQL5/Experts/</code>.</p>],
-              ['Copy the EA files', (
-                <>
-                  <p>Copy the files into the <code>Experts</code> folder, <strong>all in the same folder</strong>:</p>
-                  <ul>
-                    <li><code>CopierMaster.mq5</code>, <code>CopierSlave.mq5</code> <strong>and</strong> <code>CopierCommon.mqh</code> from the download section.</li>
-                    <li>If you were given compiled <code>.ex5</code> files instead, copy those; <code>CopierCommon.mqh</code> is then not needed.</li>
-                  </ul>
-                </>
-              )],
-              ['Compile the EAs', <p>Open MetaEditor (<code>F4</code>), open <code>CopierMaster.mq5</code> and press <code>F7</code>, then do the same for <code>CopierSlave.mq5</code>. The Errors tab should show 0 errors. Skip this step if you were given <code>.ex5</code> files.</p>],
-              ['Refresh the Navigator', <p>Back in MetaTrader press <code>Ctrl + N</code>, expand <strong>Expert Advisors</strong>, right-click it and choose <strong>Refresh</strong>. The Copier EAs should now be listed.</p>],
+              ['Open MT4 and log in', <p>Start MetaTrader 4 and log in to the exact broker account you want to connect. Confirm the account is connected and prices are updating.</p>],
+              ['Open the MT4 Data Folder', <p>In MT4 choose <strong>File → Open Data Folder</strong>. Open <code>MQL4</code>, then <code>Experts</code>. This is the MT4 Expert Advisors folder.</p>],
+              ['Copy all three MT4 files', <p>Copy <code>CopierMaster.mq4</code>, <code>CopierSlave.mq4</code> and <code>CopierCommon4.mqh</code> into the same <code>MQL4/Experts</code> folder. Do not rename the shared include file.</p>],
+              ['Compile both EAs', <p>Press <code>F4</code> to open MetaEditor. Open <code>CopierMaster.mq4</code> and press <code>F7</code>. Then open <code>CopierSlave.mq4</code> and press <code>F7</code>. Check the Errors tab: both should compile with <strong>0 errors</strong>. Fix compilation errors before continuing.</p>],
+              ['Refresh the MT4 Navigator', <p>Return to MT4, press <code>Ctrl + N</code>, right-click <strong>Expert Advisors</strong> and select <strong>Refresh</strong>. You should see CopierMaster and CopierSlave.</p>],
             ]} />
-            <Callout tone="tip">If the EAs do not appear, you probably copied them into another terminal’s data folder. Each MetaTrader installation has its own.</Callout>
+            <Callout tone="tip" title="MT4 file location matters">The three MT4 files must be together in the same terminal's <code>MQL4/Experts</code> folder. Do not put them in <code>MQL5</code> or the Indicators folder.</Callout>
+
+            <h3>MetaTrader 5 installation</h3>
+            <Steps items={[
+              ['Open MT5 and log in', <p>Start MetaTrader 5 and log in to the account you want to connect.</p>],
+              ['Open the MT5 Data Folder', <p>Choose <strong>File → Open Data Folder</strong>, then open <code>MQL5</code> and <code>Experts</code>.</p>],
+              ['Copy the MT5 files', <p>Copy <code>CopierMaster.mq5</code>, <code>CopierSlave.mq5</code> and <code>CopierCommon.mqh</code> into the same <code>MQL5/Experts</code> folder.</p>],
+              ['Compile both EAs', <p>Press <code>F4</code> to open MetaEditor. Open each <code>.mq5</code> file and press <code>F7</code>. Confirm that both compile with 0 errors.</p>],
+              ['Refresh the Navigator', <p>Return to MT5, press <code>Ctrl + N</code>, right-click <strong>Expert Advisors</strong> and choose <strong>Refresh</strong>.</p>],
+            ]} />
+            <Callout tone="warn" title="Use the correct terminal">MT4 EAs cannot run in MT5, and MT5 EAs cannot run in MT4. Each terminal has its own Data Folder and its own MetaEditor.</Callout>
           </Section>
 
           <Section id="webrequest" n={5} title="Allow WebRequest" intro="The EAs talk to Mirrorline through MetaTrader’s WebRequest, so this permission is required on every terminal.">
@@ -351,13 +417,24 @@ export default function Help() {
             <Callout tone="warn" title="Understand the risk">Mirrorline copies trades but cannot remove trading risk. Review lot sizing, risk limits, margin and broker execution conditions before copying live.</Callout>
           </Section>
 
-          <Section id="inputs" n={11} title="EA input reference" intro="The settings you are most likely to need. Open them with F7 on the chart, then the Inputs tab.">
+          <Section id="inputs" n={11} title="EA input reference" intro="The settings below are platform-specific. Open the EA properties on its chart, select Inputs, and review the values before running live trades.">
             <div className="table-wrap">
               <table className="doc-table zebra">
                 <thead><tr><th>Input</th><th>EA</th><th>What it does</th></tr></thead>
                 <tbody>
                   {INPUTS.map(([name, ea, text]) => (
                     <tr key={name}><td><code>{name}</code></td><td><span className={`badge ${ea === 'Master' ? 'badge-accent' : ''}`}>{ea}</span></td><td dangerouslySetInnerHTML={{ __html: text }} /></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <h3>MT4 input reference</h3>
+            <div className="table-wrap">
+              <table className="doc-table zebra">
+                <thead><tr><th>Input</th><th>EA</th><th>What it does</th></tr></thead>
+                <tbody>
+                  {MT4_INPUTS.map(([name, ea, description]) => (
+                    <tr key={name}><td><code>{name}</code></td><td><span className={`badge ${ea === 'Master' ? 'badge-accent' : ''}`}>{ea}</span></td><td>{description}</td></tr>
                   ))}
                 </tbody>
               </table>
