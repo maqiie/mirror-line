@@ -3,33 +3,36 @@ import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { accountName } from '../lib/DataContext';
 import { ago, clock, lots, money, plClass } from '../lib/format';
-import { Badge, Empty, PlatformTag, Segmented, SideBadge, StatusDot } from '../components/ui';
+import { Badge, Empty, PlatformTag, SideBadge, StatusDot } from '../components/ui';
 import EquityChart from '../components/EquityChart';
 import MirrorBoard from '../components/MirrorBoard';
+import Insights from '../components/Insights';
 
-const RANGES = [{ value: 7, label: '7d' }, { value: 30, label: '30d' }, { value: 90, label: '90d' }];
 
 export default function Overview() {
   const { state, derived: d } = useData();
   const [range, setRange] = useState(30);
-  const first = state.equity.find((p) => p.t >= Date.now() - range * 86400000) ?? state.equity[0];
+  const first = (range ? state.equity.find((p) => p.t >= Date.now() - range * 86400000) : null) ?? state.equity[0];
   const change = state.equity.length ? d.totalEquity - first.v : 0;
+  const changePct = state.equity.length && first.v ? (change / first.v) * 100 : 0;
+  const label = range ? `${range} days` : 'all time';
   const followers = state.accounts.filter((a) => a.role === 'slave');
 
   return (
     <>
       <section className="hero">
-        <div className="hero-fig">
-          <p className="muted">Combined equity across {state.accounts.length} account{state.accounts.length === 1 ? '' : 's'}</p>
-          <div className="big num">{money(d.totalEquity, { whole: true })}<small>{money(d.totalEquity).slice(-3)}</small></div>
-          <p className={`delta ${plClass(change)}`}>
-            {money(change, { sign: true })} over {range} days
-          </p>
+        <div className="hero-top">
+          <div className="hero-fig">
+            <p className="muted">Combined equity across {state.accounts.length} account{state.accounts.length === 1 ? '' : 's'}</p>
+            <div className="big num">{money(d.totalEquity, { whole: true })}<small>{money(d.totalEquity).slice(-3)}</small></div>
+          </div>
+          <div className="hero-delta">
+            <span className={`delta ${plClass(change)}`}>{money(change, { sign: true })}</span>
+            <span className={`delta ${plClass(change)}`}>{changePct > 0 ? '+' : changePct < 0 ? '−' : ''}{Math.abs(changePct).toFixed(2)}%</span>
+            <span className="muted small">over {label}</span>
+          </div>
         </div>
-        <div className="hero-chart">
-          <div className="chart-tools"><Segmented label="Range" value={range} onChange={setRange} options={RANGES} /></div>
-          <EquityChart points={state.equity} days={range} />
-        </div>
+        <EquityChart points={state.equity} days={range} onDays={setRange} live={state.equity.length ? d.totalEquity : null} />
       </section>
 
       <section className="stats" aria-label="Summary">
@@ -38,6 +41,8 @@ export default function Overview() {
         <div><span>Followers copying</span><strong className="num">{d.synced}<em>/{d.followers}</em></strong></div>
         <div><span>Median copy time</span><strong className="num">{d.medianLatency != null ? `${d.medianLatency}` : '—'}{d.medianLatency != null && <em> ms</em>}</strong></div>
       </section>
+
+      <Insights state={state} />
 
       <section className="card board">
         <div className="card-head"><h2>Mirror board</h2><Link className="link" to="/trades">Manage trades</Link></div>

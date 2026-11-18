@@ -163,15 +163,15 @@ function Positions() {
             <tbody>
               {rows.map((p) => (
                 <tr key={p.ticket}>
-                  <td className="nowrap">{accountName(state, p.account_id)}{p.master_ticket != null && <span className="copy-tag" title="Copied from the master">copy</span>}</td>
-                  <td><strong>{p.symbol}</strong></td>
-                  <td><SideBadge side={p.side} /></td>
-                  <td className="r num">{lots(p.volume)}</td>
-                  <td className="r num">{price(p.symbol, p.open_price)}</td>
-                  <td className="r num">{price(p.symbol, p.price)}</td>
-                  <td className="r num muted hide-md">{p.sl ? price(p.symbol, p.sl) : '—'}</td>
-                  <td className="r num muted hide-md">{p.tp ? price(p.symbol, p.tp) : '—'}</td>
-                  <td className={`r num ${plClass(p.profit)}`}>{money(p.profit, { sign: true })}</td>
+                  <td data-label="Account" className="nowrap">{accountName(state, p.account_id)}{p.master_ticket != null && <span className="copy-tag" title="Copied from the master">copy</span>}</td>
+                  <td data-label="Symbol"><strong>{p.symbol}</strong></td>
+                  <td data-label="Side"><SideBadge side={p.side} /></td>
+                  <td data-label="Lots" className="r num">{lots(p.volume)}</td>
+                  <td data-label="Open" className="r num">{price(p.symbol, p.open_price)}</td>
+                  <td data-label="Now" className="r num">{price(p.symbol, p.price)}</td>
+                  <td data-label="SL" className="r num muted hide-md">{p.sl ? price(p.symbol, p.sl) : '—'}</td>
+                  <td data-label="TP" className="r num muted hide-md">{p.tp ? price(p.symbol, p.tp) : '—'}</td>
+                  <td data-label="Profit" className={`r num ${plClass(p.profit)}`}>{money(p.profit, { sign: true })}</td>
                   <td className="r nowrap">
                     <button className="icon-btn" onClick={() => openEdit(p)} aria-label={`Edit SL/TP for ${p.symbol}`} title="Edit stop loss and take profit"><Pencil size={15} /></button>
                     <button className="icon-btn danger" onClick={() => actions.closePosition(p.ticket)} aria-label={`Close ${p.symbol} on ${accountName(state, p.account_id)}`} title="Close position"><X size={16} /></button>
