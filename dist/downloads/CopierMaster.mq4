@@ -38,6 +38,7 @@ input bool   InpAnnounceExisting = false; // on start, report already-open posit
 input bool   InpAcceptCommands = true;    // let the dashboard open / close trades on this account
 input int    InpOrderMagic     = 770001;  // magic of trades placed from the dashboard
 input int    InpSlippagePts    = 30;
+input int    InpRetries        = 3;
 input double InpMaxOrderLot    = 10.0;    // safety cap per dashboard order
 input int    InpMaxCmdAgeSec   = 15;      // ignore stale open commands
 input string InpPrefix         = "";      // broker symbol prefix/suffix, e.g. suffix ".m"
@@ -710,7 +711,7 @@ void MModifyTicket(MCmd &c, MRes &r)
    { r.status = "skipped"; r.msg = "no change"; r.ticket = c.key; return; }
 
    int err;
-   if(!CP_ModifyOrder(c.key, 0, c.sl, c.tp, err))
+   if(!CP_ModifyOrder(c.key, 0, c.sl, c.tp, InpRetries, err))
    { r.msg = CP_Err(err); return; }
 
    r.status = "executed";

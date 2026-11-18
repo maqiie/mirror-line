@@ -681,7 +681,7 @@ void DoModify(SlaveCmd &c, SlaveRes &r)
    { SetRes(r, "skipped", "no change"); r.ticket = t; return; }
 
    int err;
-   if(!CP_ModifyOrder(t, 0, sl, tp, err))
+   if(!CP_ModifyOrder(t, 0, sl, tp, InpRetries, err))
    { SetRes(r, "failed", CP_Err(err)); return; }
    r.status = "executed"; r.ticket = t;
 }
@@ -739,7 +739,7 @@ void DoPendingModify(SlaveCmd &c, SlaveRes &r)
    double sl = InpCopySLTP ? c.sl : 0, tp = InpCopySLTP ? c.tp : 0;
    FixStops(sym, isBuy, price, sl, tp);
    int err;
-   if(!CP_ModifyOrder(o, price, sl, tp, err))
+   if(!CP_ModifyOrder(o, price, sl, tp, InpRetries, err))
    { SetRes(r, "failed", CP_Err(err)); return; }
    r.status = "executed"; r.ticket = o; r.price = price;
 }
@@ -783,7 +783,7 @@ void DoModifyTicket(SlaveCmd &c, SlaveRes &r)
    { SetRes(r, "skipped", "no change"); r.ticket = c.mticket; return; }
 
    int err;
-   if(!CP_ModifyOrder(c.mticket, 0, c.sl, c.tp, err))
+   if(!CP_ModifyOrder(c.mticket, 0, c.sl, c.tp, InpRetries, err))
    { SetRes(r, "failed", CP_Err(err)); return; }
 
    r.status = "executed";

@@ -444,19 +444,35 @@ bool CP_CloseOrder(int t, double lots, int slip, int retries, double &price, int
 
 // Modify SL/TP of a position, or price/SL/TP of a pending order.
 // "No change" (error 1) counts as success.
-bool CP_ModifyOrder(int t, double newPrice, double sl, double tp, int &err)
+bool CP_ModifyOrder(int t, double newPrice, double sl, double tp, int retries, int &err)
 {
    err = 0;
-   if(!OrderSelect(t, SELECT_BY_TICKET) || OrderCloseTime() != 0) { err = 4108; return false; }
-   int dg = (int)MarketInfo(OrderSymbol(), MODE_DIGITS);
-   double pr = (OrderType() <= OP_SELL) ? OrderOpenPrice() : NormalizeDouble(newPrice, dg);
-   sl = NormalizeDouble(sl, dg);
-   tp = NormalizeDouble(tp, dg);
+   if(retries < 0) retries = 0;
 
-   ResetLastError();
-   if(OrderModify(t, pr, sl, tp, 0, clrNONE)) return true;
-   err = GetLastError();
-   if(err == 1) { err = 0; return true; }
+   for(int a = 0; a <= retries; a++)
+   {
+      if(!OrderSelect(t, SELECT_BY_TICKET) || OrderCloseTime() != 0)
+      { err = 4108; return false; }
+
+      int dg = (int)MarketInfo(OrderSymbol(), MODE_DIGITS);
+      double pr = (OrderType() <= OP_SELL)
+                  ? OrderOpenPrice()
+                  : NormalizeDouble(newPrice, dg);
+      double attemptSL = NormalizeDouble(sl, dg);
+      double attemptTP = NormalizeDouble(tp, dg);
+
+      ResetLastError();
+      if(OrderModify(t, pr, attemptSL, attemptTP, 0, clrNONE))
+      { err = 0; return true; }
+
+      err = GetLastError();
+      if(err == 1) { err = 0; return true; }
+      if(!CP_Retryable(err)) break;
+
+      Sleep(150);
+      RefreshRates();
+   }
+
    return false;
 }
 
