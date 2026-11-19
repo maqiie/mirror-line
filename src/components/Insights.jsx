@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { accountName } from '../lib/DataContext';
-import { baseSymbol, lots, money, plClass, price } from '../lib/format';
+import { baseSymbol, clock, lots, money, plClass, price } from '../lib/format';
+import { useAudit } from '../lib/useAudit';
 
 // Everything here is derived from the snapshot the dashboard already polls: no extra requests.
 
@@ -191,7 +192,75 @@ function CopyQuality({ state }) {
   );
 }
 
+
+/* ---------- 5. order log (GET /audit/commands, same call as the Activity page) ---------- */
+const ACTION = { open: 'Open', add: 'Add to trade', close: 'Close', partial_close: 'Partial close', modify: 'Change SL/TP', pending_place: 'Place pending', pending_modify: 'Change pending', pending_delete: 'Delete pending', close_all: 'Close all', close_ticket: 'Close position' };
+const STATUS_COLOR = { executed: 'var(--gain)', pending: 'var(--ink-3)', sent: 'var(--ink-3)', skipped: 'var(--warn)', failed: 'var(--loss)', expired: 'var(--loss)' };
+
+function OrderLog({ state, rows }) {
+  const [hot, setHot] = useState(null);
+  const data = useMemo(() => {
+    const now = Date.now();
+    const buckets = Array.from({ length: 24 }, (_, i) => ({ h: i, start: now - (24 - i) * 3600000, ok: 0, bad: 0, other: 0 }));
+    const counts = {};
+    const bad = [];
+    rows.forEach((c) => {
+      counts[c.status] = (counts[c.status] ?? 0) + 1;
+      const age = now - new Date(c.created_at).getTime();
+      const b = buckets[23 - Math.floor(age / 3600000)];
+      if (b && age >= 0) { if (c.status === 'executed') b.ok += 1; else if (c.status === 'failed' || c.status === 'expired') b.bad += 1; else b.other += 1; }
+      if (c.status === 'failed' || c.status === 'expired') bad.push(c);
+    });
+    const in24 = buckets.reduce((t, b) => t + b.ok + b.bad + b.other, 0);
+    return { buckets, counts, bad: bad.slice(0, 5), in24, max: Math.max(1, ...buckets.map((b) => b.ok + b.bad + b.other)) };
+  }, [rows]);
+  const h = hot != null ? data.buckets[hot] : null;
+  const order = ['executed', 'pending', 'sent', 'skipped', 'failed', 'expired'].filter((k) => data.counts[k]);
+  return (
+    <Panel className="wide" title="Order log" note={`last ${rows.length} orders`} readout={h ? <><strong>{clock(new Date(h.start).toISOString()).slice(0, 5)} to {clock(new Date(h.start + 3600000).toISOString()).slice(0, 5)}</strong>: {h.ok} executed, {h.bad} failed or expired, {h.other} other</> : <><strong className="num">{data.in24}</strong> orders in the last 24 hours. Hover a bar for that hour</>}>
+      <div className="order-grid">
+        <div>
+          <div className="hours" role="img" aria-label="Orders per hour over the last 24 hours" onMouseLeave={() => setHot(null)}>
+            {data.buckets.map((b, i) => {
+              const t = b.ok + b.bad + b.other;
+              return (
+                <div key={b.h} className={`hr ${hot === i ? 'hot' : ''}`} onMouseEnter={() => setHot(i)} onTouchStart={() => setHot(i)}>
+                  <span style={{ height: `${(t / data.max) * 100}%` }}>
+                    {b.bad > 0 && <i style={{ flexGrow: b.bad, background: 'var(--loss)' }} />}
+                    {b.other > 0 && <i style={{ flexGrow: b.other, background: 'var(--ink-3)' }} />}
+                    {b.ok > 0 && <i style={{ flexGrow: b.ok, background: 'var(--gain)' }} />}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="hours-axis" aria-hidden="true"><span>24h ago</span><span>12h</span><span>now</span></div>
+          <p className="outcomes small">
+            {order.map((k) => <span key={k}><b style={{ color: STATUS_COLOR[k] }}>●</b> {data.counts[k]} {k === 'pending' || k === 'sent' ? 'waiting' : k}</span>)}
+          </p>
+        </div>
+        <div>
+          <h3 className="mini-h">Needs attention</h3>
+          {data.bad.length === 0 ? <p className="muted small">No failed or expired orders in this log.</p> : (
+            <ul className="attn">
+              {data.bad.map((c) => (
+                <li key={c.id}>
+                  <div><strong>{ACTION[c.action] ?? c.action}{c.symbol ? ` ${c.symbol}` : ''}</strong><span className="muted small"> on {accountName(state, c.account_id)}</span></div>
+                  <div className="small loss">{c.result_message || (c.status === 'expired' ? 'Expired before the EA picked it up' : 'Failed')}</div>
+                  <div className="num muted small">{new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} {clock(c.created_at)}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Link className="link small" to="/activity">Open the full log</Link>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 export default function Insights({ state }) {
+  const audit = useAudit();
   return (
     <>
       <QuoteStrip market={state.market} />
@@ -200,6 +269,7 @@ export default function Insights({ state }) {
         <Exposure state={state} />
         <OpenProfit state={state} />
         <CopyQuality state={state} />
+        {audit && audit.length > 0 && <OrderLog state={state} rows={audit} />}
       </div>
     </>
   );
